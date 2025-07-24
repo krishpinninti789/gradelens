@@ -149,3 +149,9 @@ export interface PieChartData {
   value: number;
   color: string;
 }
+
+export interface SubjectProps {
+  marks: number;
+  name: string;
+  maxMarks: number;
+}

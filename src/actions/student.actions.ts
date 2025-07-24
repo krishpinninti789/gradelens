@@ -4,8 +4,14 @@ import type {
   UploadResponse,
   DownloadResponse,
   StudentAnalysisData,
+  SubjectProps,
 } from "@/types";
 import { analyzeWithPerplexity } from "./ai.actions";
+import pdfParse from "pdf-parse";
+import { PDFDocument } from "pdf-lib";
+// import { parseStudentDataWithPerplexity } from "./parseWithPerplexity";
+import { generateText } from "ai";
+import { perplexity } from "@ai-sdk/perplexity";
 
 export async function uploadAndAnalyzeReport(
   formData: FormData
@@ -13,26 +19,14 @@ export async function uploadAndAnalyzeReport(
   try {
     const file = formData.get("file") as File;
 
-    if (!file) {
-      return { success: false, error: "No file provided" };
-    }
-
-    if (file.type !== "application/pdf") {
+    if (!file) return { success: false, error: "No file provided" };
+    if (file.type !== "application/pdf")
       return { success: false, error: "Only PDF files are supported" };
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      // 10MB limit
+    if (file.size > 10 * 1024 * 1024)
       return { success: false, error: "File size must be less than 10MB" };
-    }
 
-    // Step 1: Extract text from PDF (simulated - in production use pdf-parse)
     const extractedText = await extractTextFromPDF(file);
-
-    // Step 2: Parse student data from extracted text
-    const parsedData = await parseStudentData(extractedText);
-
-    // Step 3: Analyze with AI immediately
+    const parsedData = await parseStudentDataWithPerplexity(extractedText);
     const analysis = await analyzeWithPerplexity({
       studentData: {
         name: parsedData.name,
@@ -41,23 +35,22 @@ export async function uploadAndAnalyzeReport(
       },
     });
 
-    // Step 4: Create complete analysis data instantly
     const analysisData: StudentAnalysisData = {
-      id: `instant_${Date.now()}`, // Temporary ID for instant processing
+      id: `instant_${Date.now()}`,
       name: parsedData.name,
       rollNumber: parsedData.rollNumber,
       class: parsedData.class,
       term: parsedData.term,
       overallGrade: calculateGrade(parsedData.overallPercentage),
       overallPercentage: parsedData.overallPercentage,
-      subjects: parsedData.subjects.map((subject) => ({
+      subjects: parsedData.subjects.map((subject: SubjectProps) => ({
         ...subject,
         grade: calculateGrade((subject.marks / subject.maxMarks) * 100),
       })),
       strengths: analysis.strengths,
       improvements: analysis.improvements,
       recommendations: analysis.recommendations,
-      performanceData: parsedData.subjects.map((subject) => ({
+      performanceData: parsedData.subjects.map((subject: SubjectProps) => ({
         subject: subject.name,
         percentage: Math.round((subject.marks / subject.maxMarks) * 100),
       })),
@@ -68,7 +61,7 @@ export async function uploadAndAnalyzeReport(
     return {
       success: true,
       reportId: analysisData.id,
-      data: analysisData, // Return data immediately
+      data: analysisData,
     };
   } catch (error) {
     console.error("Upload and analysis failed:", error);
@@ -83,7 +76,6 @@ export async function generateInstantReport(
   analysisData: StudentAnalysisData
 ): Promise<DownloadResponse> {
   try {
-    // Generate PDF report content instantly
     const reportContent = await generatePDFReport(analysisData);
 
     return {
@@ -98,160 +90,52 @@ export async function generateInstantReport(
   }
 }
 
-// Helper function to extract text from PDF (simulated)
 async function extractTextFromPDF(file: File): Promise<string> {
-  // In production, use libraries like:
-  // - pdf-parse
-  // - PDF.js
-  // - pdfjs-dist
-
-  // Simulate PDF text extraction
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  // Mock extracted text that would come from actual PDF
-  return `
-    STUDENT REPORT CARD
-    
-    Student Name: John Smith
-    Roll Number: ST2024${Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, "0")}
-    Class: Grade 10-A
-    Term: Mid-Term Examination 2024
-    
-    SUBJECT-WISE MARKS:
-    Mathematics: 85/100 - Good problem solving skills
-    Science: 92/100 - Excellent practical work
-    English: 78/100 - Needs improvement in grammar
-    History: 88/100 - Strong analytical thinking
-    Geography: 82/100 - Good map reading skills
-    
-    Overall Percentage: 85%
-    Grade: A
-  `;
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const data = await pdfParse(buffer);
+  return data.text;
 }
 
-// Helper function to parse student data from extracted text
-async function parseStudentData(extractedText: string) {
-  // In production, use NLP or regex patterns to extract structured data
-  // For now, simulate parsing with realistic data
+async function generatePDFReport(data: StudentAnalysisData): Promise<string> {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595.28, 841.89]);
+  const { width, height } = page.getSize();
 
-  const subjects = [
-    {
-      name: "Mathematics",
-      marks: 85,
-      maxMarks: 100,
-      remarks: "Good problem solving skills",
-    },
-    {
-      name: "Science",
-      marks: 92,
-      maxMarks: 100,
-      remarks: "Excellent practical work",
-    },
-    {
-      name: "English",
-      marks: 78,
-      maxMarks: 100,
-      remarks: "Needs improvement in grammar",
-    },
-    {
-      name: "History",
-      marks: 88,
-      maxMarks: 100,
-      remarks: "Strong analytical thinking",
-    },
-    {
-      name: "Geography",
-      marks: 82,
-      maxMarks: 100,
-      remarks: "Good map reading skills",
-    },
-  ];
+  const fontSize = 12;
+  let y = height - 50;
 
-  const overallPercentage = Math.round(
-    subjects.reduce(
-      (sum, subject) => sum + (subject.marks / subject.maxMarks) * 100,
-      0
-    ) / subjects.length
-  );
+  function writeLine(line: string) {
+    page.drawText(line, { x: 50, y, size: fontSize });
+    y -= 20;
+  }
 
-  return {
-    name: `Student_${Date.now().toString().slice(-4)}`, // Would be extracted from PDF
-    rollNumber: `ST2025${Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, "0")}`,
-    class: "Grade 10-A",
-    term: "Mid-Term Examination 2025",
-    subjects,
-    overallPercentage,
-  };
+  writeLine("GRADELENS - AI STUDENT PERFORMANCE REPORT");
+  writeLine(`Name: ${data.name}`);
+  writeLine(`Roll Number: ${data.rollNumber}`);
+  writeLine(`Class: ${data.class}`);
+  writeLine(`Term: ${data.term}`);
+  writeLine(`Overall Grade: ${data.overallGrade}`);
+  writeLine(`Overall Percentage: ${data.overallPercentage}%`);
+  writeLine("");
+  writeLine("Subjects:");
+  data.subjects.forEach((s) => {
+    writeLine(
+      `  - ${s.name}: ${s.marks}/${s.maxMarks} (${s.grade}) - ${s.remarks}`
+    );
+  });
+  writeLine("");
+  writeLine("Strengths:");
+  data.strengths.forEach((s, i) => writeLine(`  ${i + 1}. ${s}`));
+  writeLine("Improvements:");
+  data.improvements.forEach((s, i) => writeLine(`  ${i + 1}. ${s}`));
+  writeLine("Recommendations:");
+  data.recommendations.forEach((s, i) => writeLine(`  ${i + 1}. ${s}`));
+
+  const pdfBytes = await pdfDoc.saveAsBase64({ dataUri: true });
+  return pdfBytes;
 }
 
-// Helper function to generate PDF report content
-async function generatePDFReport(
-  analysis: StudentAnalysisData
-): Promise<string> {
-  // In production, use libraries like:
-  // - jsPDF
-  // - Puppeteer
-  // - React-PDF
-  // - PDFKit
-
-  // For now, return formatted text content
-  return `
-GRADELENS - AI STUDENT PERFORMANCE ANALYSIS REPORT
-================================================
-
-STUDENT INFORMATION
-------------------
-Name: ${analysis.name}
-Roll Number: ${analysis.rollNumber}
-Class: ${analysis.class}
-Term: ${analysis.term}
-Overall Grade: ${analysis.overallGrade}
-Overall Percentage: ${analysis.overallPercentage}%
-
-SUBJECT-WISE PERFORMANCE
------------------------
-${analysis.subjects
-  .map(
-    (subject) =>
-      `${subject.name}: ${subject.marks}/${subject.maxMarks} (${subject.grade}) - ${subject.remarks}`
-  )
-  .join("\n")}
-
-STRENGTHS & MERITS
------------------
-${analysis.strengths
-  .map((strength, index) => `${index + 1}. ${strength}`)
-  .join("\n")}
-
-AREAS FOR IMPROVEMENT
---------------------
-${analysis.improvements
-  .map((improvement, index) => `${index + 1}. ${improvement}`)
-  .join("\n")}
-
-AI-POWERED RECOMMENDATIONS
--------------------------
-${analysis.recommendations
-  .map((recommendation, index) => `${index + 1}. ${recommendation}`)
-  .join("\n")}
-
-PERFORMANCE SUMMARY
-------------------
-${analysis.performanceData
-  .map((data) => `${data.subject}: ${data.percentage}%`)
-  .join("\n")}
-
----
-Report Generated: ${new Date().toLocaleString()}
-Powered by GradeLens AI Analysis System
-  `.trim();
-}
-
-// Helper function to calculate grade
 function calculateGrade(percentage: number): string {
   if (percentage >= 95) return "A+";
   if (percentage >= 85) return "A";
@@ -261,4 +145,46 @@ function calculateGrade(percentage: number): string {
   if (percentage >= 45) return "C";
   if (percentage >= 35) return "D";
   return "F";
+}
+
+export async function parseStudentDataWithPerplexity(extractedText: string) {
+  const prompt = `
+Given the following student report card text, extract the structured student performance data in the following JSON format:
+
+{
+  "name": string,
+  "rollNumber": string,
+  "class": string,
+  "term": string,
+  "subjects": [
+    {
+      "name": string,
+      "marks": number,
+      "maxMarks": number,
+      "remarks": string
+    }
+  ],
+  "overallPercentage": number
+}
+
+Text:
+"""${extractedText}"""
+
+Only return valid JSON. Do not explain anything else.
+`;
+
+  const result = await generateText({
+    model: perplexity("sonar-small-online"), // You can use other models like "sonar-medium-online"
+    prompt,
+  });
+
+  const output = result.text;
+
+  try {
+    const parsed = JSON.parse(output);
+    return parsed;
+  } catch (error) {
+    console.error("Perplexity returned invalid JSON:", output);
+    throw new Error("Failed to parse data from Perplexity.");
+  }
 }

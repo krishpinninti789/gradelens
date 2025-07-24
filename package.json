@@ -9,13 +9,17 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/perplexity": "^1.1.9",
     "@clerk/nextjs": "^6.26.0",
     "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
+    "ai": "^4.3.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.525.0",
     "next": "15.4.3",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "recharts": "^2.15.4",
@@ -24,6 +28,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
