@@ -150,6 +150,25 @@ export async function generateInstantReport(
   }
 }
 
+export async function getStudentAnalysis(
+  id: string
+): Promise<StudentAnalysisData | null> {
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const analysis = null;
+
+    if (!analysis) {
+      return null;
+    }
+
+    return analysis;
+  } catch (error) {
+    console.error("Failed to fetch analysis:", error);
+    return null;
+  }
+}
+
 function calculateGrade(percentage: number): string {
   if (percentage >= 95) return "A+";
   if (percentage >= 85) return "A";

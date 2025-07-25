@@ -99,12 +99,6 @@ export interface RecommendationsCardProps {
   recommendations: string[];
 }
 
-export interface AnalysisPageProps {
-  params: {
-    id: string;
-  };
-}
-
 // Form and UI types
 export interface UploadFormData {
   file: File;

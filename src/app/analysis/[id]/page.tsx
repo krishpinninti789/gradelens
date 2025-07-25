@@ -1,9 +1,9 @@
-import { StudentAnalysis } from "@/components/student-analysis";
-import { getStudentAnalysis } from "@/lib/actions";
 import { notFound } from "next/navigation";
-import type { AnalysisPageProps } from "@/types/components";
+import { StudentAnalysis } from "@/components/StudentAnalysis";
 
-const AnalysisPage = async ({ params }: AnalysisPageProps) => {
+import { getStudentAnalysis } from "@/actions";
+
+const AnalysisPage = async ({ params }: any) => {
   const analysis = await getStudentAnalysis(params.id);
 
   if (!analysis) {
