@@ -28,6 +28,8 @@ export interface StudentAnalysisData {
   rollNumber: string;
   class: string;
   term: string;
+  attendance: number;
+  behaviour: string;
   overallGrade: string;
   overallPercentage: number;
   subjects: Subject[];
@@ -151,7 +153,8 @@ export interface PieChartData {
 }
 
 export interface SubjectProps {
-  marks: number;
   name: string;
+  marks: number;
   maxMarks: number;
+  remarks: string;
 }

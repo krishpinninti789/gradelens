@@ -67,6 +67,8 @@ const demoData: StudentAnalysisData = {
     { subject: "English", percentage: 72 },
     { subject: "Social Studies", percentage: 80 },
   ],
+  attendance: 90,
+  behaviour: "Good",
   createdAt: new Date(),
   updatedAt: new Date(),
 };

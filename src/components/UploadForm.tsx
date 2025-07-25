@@ -16,6 +16,9 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  Eye,
+  X,
+  RotateCcw,
 } from "lucide-react";
 import { uploadAndAnalyzeReport, generateInstantReport } from "@/actions";
 
@@ -24,6 +27,7 @@ import { StudentAnalysis } from "./StudentAnalysis";
 
 export function UploadForm() {
   const [file, setFile] = useState<File | null>(null);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [analysisData, setAnalysisData] = useState<StudentAnalysisData | null>(
@@ -31,6 +35,7 @@ export function UploadForm() {
   );
   const [error, setError] = useState<string | null>(null);
   const [processingStep, setProcessingStep] = useState<string>("");
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -51,6 +56,7 @@ export function UploadForm() {
       const droppedFile = e.dataTransfer.files[0];
       if (droppedFile.type === "application/pdf") {
         setFile(droppedFile);
+        setFileUrl(URL.createObjectURL(droppedFile));
         setError(null);
       } else {
         setError("Please select a PDF file");
@@ -63,11 +69,21 @@ export function UploadForm() {
       const selectedFile = e.target.files[0];
       if (selectedFile.type === "application/pdf") {
         setFile(selectedFile);
+        setFileUrl(URL.createObjectURL(selectedFile));
         setError(null);
       } else {
         setError("Please select a PDF file");
       }
     }
+  };
+
+  const handleRemoveFile = () => {
+    if (fileUrl) {
+      URL.revokeObjectURL(fileUrl);
+    }
+    setFile(null);
+    setFileUrl(null);
+    setError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,18 +95,17 @@ export function UploadForm() {
     setAnalysisData(null);
 
     try {
-      // Step 1: Extract text from PDF
-      setProcessingStep("Extracting text from PDF...");
+      setProcessingStep("Extracting text from uploaded PDF...");
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Step 2: Parse student data
-      setProcessingStep("Parsing student information...");
+      setProcessingStep("Parsing student information from your file...");
       await new Promise((resolve) => setTimeout(resolve, 800));
 
-      // Step 3: AI Analysis
       setProcessingStep("Analyzing performance with AI...");
+
+      // Only use the actual uploaded file
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", file); // This should be the user's uploaded file only
 
       const result = await uploadAndAnalyzeReport(formData);
 
@@ -98,7 +113,7 @@ export function UploadForm() {
         setProcessingStep("Analysis complete!");
         setAnalysisData(result.data);
       } else {
-        setError(result.error || "Failed to analyze report");
+        setError(result.error || "Failed to analyze your uploaded report");
       }
     } catch (error) {
       console.error("Processing failed:", error);
@@ -141,30 +156,50 @@ export function UploadForm() {
   };
 
   const resetForm = () => {
+    if (fileUrl) {
+      URL.revokeObjectURL(fileUrl);
+    }
     setFile(null);
+    setFileUrl(null);
     setAnalysisData(null);
     setError(null);
     setProcessingStep("");
+    setShowPdfPreview(false);
   };
 
   // Show analysis results if available
   if (analysisData) {
     return (
       <div className="space-y-6">
-        {/* Success Header */}
+        {/* Success Header with Original PDF Info */}
         <Card className="border-vprimary/20 bg-vprimary/5">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <CheckCircle className="h-8 w-8 text-vprimary" />
-              <div>
+              <div className="flex-1">
                 <h3 className="text-lg font-semibold text-vprimary">
                   Analysis Complete!
                 </h3>
                 <p className="text-gray-600">
-                  Your student report has been analyzed successfully.
+                  Analysis of <span className="font-medium">{file?.name}</span>{" "}
+                  completed successfully.
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  File size: {file ? (file.size / 1024 / 1024).toFixed(2) : 0}{" "}
+                  MB • Processed: {new Date().toLocaleString()}
                 </p>
               </div>
-              <div className="ml-auto flex gap-2">
+              <div className="flex gap-2">
+                {fileUrl && (
+                  <Button
+                    onClick={() => setShowPdfPreview(true)}
+                    variant="outline"
+                    className="border-vprimary text-vprimary hover:bg-vprimary hover:text-white"
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    View PDF
+                  </Button>
+                )}
                 <Button
                   onClick={handleDownloadReport}
                   className="bg-vprimary hover:bg-vsecondary text-white"
@@ -172,12 +207,41 @@ export function UploadForm() {
                   Download Report
                 </Button>
                 <Button onClick={resetForm} variant="outline">
+                  <RotateCcw className="mr-2 h-4 w-4" />
                   Analyze Another
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* PDF Preview Modal */}
+        {showPdfPreview && fileUrl && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="text-lg font-semibold">
+                  Original PDF: {file?.name}
+                </h3>
+                <Button
+                  onClick={() => setShowPdfPreview(false)}
+                  variant="ghost"
+                  size="sm"
+                  className="hover:bg-gray-100"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex-1 p-4">
+                <iframe
+                  src={fileUrl}
+                  className="w-full h-[70vh] border rounded"
+                  title="PDF Preview"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Analysis Results */}
         <StudentAnalysis data={analysisData} />
@@ -221,28 +285,108 @@ export function UploadForm() {
 
             <div className="space-y-4">
               {file ? (
-                <div className="flex items-center justify-center gap-2">
-                  <FileText className="h-8 w-8 text-vprimary" />
-                  <span className="text-lg font-medium text-vprimary">
-                    {file.name}
-                  </span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <FileText className="h-8 w-8 text-vprimary" />
+                    <span className="text-lg font-medium text-vprimary">
+                      {file.name}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <p>Size: {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p>Type: {file.type}</p>
+                    <p>
+                      Last modified:{" "}
+                      {new Date(file.lastModified).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    {fileUrl && (
+                      <Button
+                        type="button"
+                        onClick={() => setShowPdfPreview(true)}
+                        variant="outline"
+                        size="sm"
+                        className="border-vprimary text-vprimary hover:bg-vprimary hover:text-white"
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview PDF
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      onClick={handleRemoveFile}
+                      variant="outline"
+                      size="sm"
+                      className="border-red-300 text-red-600 hover:bg-red-50 bg-transparent"
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Remove
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                <>
+                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                  <div>
+                    <p className="text-lg font-medium text-gray-900">
+                      Drop your PDF here, or click to browse
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      PDF files only, up to 10MB
+                    </p>
+                  </div>
+                </>
               )}
-
-              <div>
-                <p className="text-lg font-medium text-gray-900">
-                  {file
-                    ? "File selected"
-                    : "Drop your PDF here, or click to browse"}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  PDF files only, up to 10MB
-                </p>
-              </div>
             </div>
           </div>
+
+          {/* PDF Preview Modal */}
+          {showPdfPreview && fileUrl && !analysisData && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b">
+                  <h3 className="text-lg font-semibold">
+                    PDF Preview: {file?.name}
+                  </h3>
+                  <Button
+                    onClick={() => setShowPdfPreview(false)}
+                    variant="ghost"
+                    size="sm"
+                    className="hover:bg-gray-100"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex-1 p-4">
+                  <iframe
+                    src={fileUrl}
+                    className="w-full h-[70vh] border rounded"
+                    title="PDF Preview"
+                  />
+                </div>
+                <div className="p-4 border-t bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      <p>
+                        <strong>File:</strong> {file?.name}
+                      </p>
+                      <p>
+                        <strong>Size:</strong>{" "}
+                        {file ? (file.size / 1024 / 1024).toFixed(2) : 0} MB
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => setShowPdfPreview(false)}
+                      className="bg-vprimary hover:bg-vsecondary text-white"
+                    >
+                      Close Preview
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -256,7 +400,12 @@ export function UploadForm() {
           {isProcessing && (
             <div className="flex items-center gap-3 p-4 bg-vprimary/5 border border-vprimary/20 rounded-lg">
               <Loader2 className="h-5 w-5 animate-spin text-vprimary" />
-              <p className="text-vprimary font-medium">{processingStep}</p>
+              <div className="flex-1">
+                <p className="text-vprimary font-medium">{processingStep}</p>
+                <p className="text-sm text-gray-600">
+                  Processing: {file?.name}
+                </p>
+              </div>
             </div>
           )}
 
@@ -270,7 +419,7 @@ export function UploadForm() {
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Processing...
+                Processing {file?.name}...
               </>
             ) : (
               <>
@@ -279,6 +428,14 @@ export function UploadForm() {
               </>
             )}
           </Button>
+
+          {/* File Info Display */}
+          {file && !isProcessing && (
+            <div className="text-center text-sm text-gray-500">
+              Ready to analyze:{" "}
+              <span className="font-medium text-gray-700">{file.name}</span>
+            </div>
+          )}
         </form>
       </CardContent>
     </Card>

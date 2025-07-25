@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+
 import {
   Download,
   User,
@@ -18,14 +19,18 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
+  FileText,
 } from "lucide-react";
-import { generateInstantReport } from "@/actions";
 import type { StudentAnalysisProps } from "@/types";
-import { PerformanceChart } from "./PerformanceChart";
 import { SubjectBreakdown } from "./SubjectBreakDown";
+import { PerformanceChart } from "./PerformanceChart";
 import { RecommendationsCard } from "./RecommendationsCard";
+import { generateInstantReport } from "@/actions";
 
-export function StudentAnalysis({ data }: StudentAnalysisProps) {
+export function StudentAnalysis({
+  data,
+  originalFileName,
+}: StudentAnalysisProps & { originalFileName?: string }) {
   const handleDownloadReport = async () => {
     try {
       const result = await generateInstantReport(data);
@@ -47,11 +52,8 @@ export function StudentAnalysis({ data }: StudentAnalysisProps) {
         document.body.removeChild(element);
         URL.revokeObjectURL(url);
       } else {
-        console.error("Download failed:", result.error);
       }
-    } catch (error) {
-      console.error("Download failed:", error);
-    }
+    } catch (error) {}
   };
 
   const getGradeColor = (grade: string) => {
@@ -78,11 +80,19 @@ export function StudentAnalysis({ data }: StudentAnalysisProps) {
           <h1 className="text-3xl font-bold text-gray-900">
             Real-time Performance Analysis
           </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <Clock className="h-4 w-4 text-vprimary" />
-            <p className="text-gray-600">
-              Generated instantly • {new Date().toLocaleString()}
-            </p>
+          <div className="flex items-center gap-4 mt-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-vprimary" />
+              <p className="text-gray-600">
+                Generated instantly • {new Date().toLocaleString()}
+              </p>
+            </div>
+            {originalFileName && (
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-gray-500" />
+                <p className="text-gray-600">Source: {originalFileName}</p>
+              </div>
+            )}
           </div>
         </div>
         <Button

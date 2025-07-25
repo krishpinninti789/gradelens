@@ -5,13 +5,15 @@ import type {
   DownloadResponse,
   StudentAnalysisData,
   SubjectProps,
+  PerplexityAnalysisResponse,
 } from "@/types";
-import { analyzeWithPerplexity } from "./ai.actions";
+import PDFDocument from "pdfkit";
+
 import pdfParse from "pdf-parse";
-import { PDFDocument } from "pdf-lib";
-// import { parseStudentDataWithPerplexity } from "./parseWithPerplexity";
+// import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { generateText } from "ai";
 import { perplexity } from "@ai-sdk/perplexity";
+import { analyzeWithPerplexity } from "./ai.actions";
 
 export async function uploadAndAnalyzeReport(
   formData: FormData
@@ -19,14 +21,16 @@ export async function uploadAndAnalyzeReport(
   try {
     const file = formData.get("file") as File;
 
-    if (!file) return { success: false, error: "No file provided" };
-    if (file.type !== "application/pdf")
-      return { success: false, error: "Only PDF files are supported" };
-    if (file.size > 10 * 1024 * 1024)
-      return { success: false, error: "File size must be less than 10MB" };
+    if (!file || file.type !== "application/pdf" || file.size === 0) {
+      return {
+        success: false,
+        error: "Invalid or empty PDF file provided",
+      };
+    }
 
     const extractedText = await extractTextFromPDF(file);
     const parsedData = await parseStudentDataWithPerplexity(extractedText);
+
     const analysis = await analyzeWithPerplexity({
       studentData: {
         name: parsedData.name,
@@ -50,6 +54,8 @@ export async function uploadAndAnalyzeReport(
       strengths: analysis.strengths,
       improvements: analysis.improvements,
       recommendations: analysis.recommendations,
+      attendance: parsedData.attendance || "Not specified",
+      behaviour: parsedData.behaviour || "Not specified",
       performanceData: parsedData.subjects.map((subject: SubjectProps) => ({
         subject: subject.name,
         percentage: Math.round((subject.marks / subject.maxMarks) * 100),
@@ -64,76 +70,84 @@ export async function uploadAndAnalyzeReport(
       data: analysisData,
     };
   } catch (error) {
-    console.error("Upload and analysis failed:", error);
     return {
       success: false,
-      error: "Failed to process report. Please try again.",
+      error: error instanceof Error ? error.message : "Unknown error occurred",
     };
   }
+}
+
+export async function extractTextFromPDF(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const data = await pdfParse(buffer);
+
+  if (!data.text || data.text.trim().length === 0) {
+    throw new Error("No readable text found in PDF");
+  }
+
+  return data.text;
 }
 
 export async function generateInstantReport(
   analysisData: StudentAnalysisData
 ): Promise<DownloadResponse> {
   try {
-    const reportContent = await generatePDFReport(analysisData);
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Uint8Array[] = [];
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    const pdfBufferPromise = new Promise<Buffer>((resolve) => {
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+
+    doc.font("Times-Roman");
+
+    // Header
+    doc.fontSize(16).fillColor("blue").text("Student Performance Report");
+    doc.moveDown();
+
+    // Student Info
+    doc.fontSize(12).fillColor("black");
+    doc.text(`Name: ${analysisData.name}`);
+    doc.text(`Class: ${analysisData.class}`);
+    doc.text(`Roll Number: ${analysisData.rollNumber}`);
+    doc.moveDown();
+
+    doc
+      .fillColor("green")
+      .text(
+        `Overall: ${analysisData.overallPercentage}% - ${analysisData.overallGrade}`
+      );
+    doc.moveDown();
+
+    doc.fillColor("black").text("Subject-wise Performance:");
+    analysisData.subjects.forEach((subject) => {
+      doc
+        .fontSize(10)
+        .text(
+          `• ${subject.name}: ${subject.marks}/${subject.maxMarks} - ${subject.grade}`
+        );
+    });
+
+    doc.end();
+
+    const pdfBuffer = await pdfBufferPromise;
+    const base64 = pdfBuffer.toString("base64");
 
     return {
       success: true,
-      fileName: `${analysisData.name.replace(/\s+/g, "_")}_Analysis_Report.pdf`,
-      fileContent: reportContent,
+      fileName: `${analysisData.name.replace(/\s+/g, "_")}_Report.pdf`,
+      fileContent: base64,
       mimeType: "application/pdf",
     };
   } catch (error) {
-    console.error("Report generation failed:", error);
-    return { success: false, error: "Failed to generate report" };
+    console.error(error);
+    return {
+      success: false,
+      error: "Failed to generate PDF",
+    };
   }
-}
-
-async function extractTextFromPDF(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const data = await pdfParse(buffer);
-  return data.text;
-}
-
-async function generatePDFReport(data: StudentAnalysisData): Promise<string> {
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595.28, 841.89]);
-  const { width, height } = page.getSize();
-
-  const fontSize = 12;
-  let y = height - 50;
-
-  function writeLine(line: string) {
-    page.drawText(line, { x: 50, y, size: fontSize });
-    y -= 20;
-  }
-
-  writeLine("GRADELENS - AI STUDENT PERFORMANCE REPORT");
-  writeLine(`Name: ${data.name}`);
-  writeLine(`Roll Number: ${data.rollNumber}`);
-  writeLine(`Class: ${data.class}`);
-  writeLine(`Term: ${data.term}`);
-  writeLine(`Overall Grade: ${data.overallGrade}`);
-  writeLine(`Overall Percentage: ${data.overallPercentage}%`);
-  writeLine("");
-  writeLine("Subjects:");
-  data.subjects.forEach((s) => {
-    writeLine(
-      `  - ${s.name}: ${s.marks}/${s.maxMarks} (${s.grade}) - ${s.remarks}`
-    );
-  });
-  writeLine("");
-  writeLine("Strengths:");
-  data.strengths.forEach((s, i) => writeLine(`  ${i + 1}. ${s}`));
-  writeLine("Improvements:");
-  data.improvements.forEach((s, i) => writeLine(`  ${i + 1}. ${s}`));
-  writeLine("Recommendations:");
-  data.recommendations.forEach((s, i) => writeLine(`  ${i + 1}. ${s}`));
-
-  const pdfBytes = await pdfDoc.saveAsBase64({ dataUri: true });
-  return pdfBytes;
 }
 
 function calculateGrade(percentage: number): string {
@@ -147,44 +161,50 @@ function calculateGrade(percentage: number): string {
   return "F";
 }
 
-export async function parseStudentDataWithPerplexity(extractedText: string) {
-  const prompt = `
-Given the following student report card text, extract the structured student performance data in the following JSON format:
+export async function parseStudentDataWithPerplexity(
+  extractedText: string
+): Promise<any> {
+  const prompt = `Extract this student's data from the report:
 
-{
-  "name": string,
-  "rollNumber": string,
-  "class": string,
-  "term": string,
-  "subjects": [
-    {
-      "name": string,
-      "marks": number,
-      "maxMarks": number,
-      "remarks": string
-    }
-  ],
-  "overallPercentage": number
-}
+${extractedText}
 
-Text:
-"""${extractedText}"""
-
-Only return valid JSON. Do not explain anything else.
-`;
+Return JSON with:
+- name
+- rollNumber
+- class
+- term
+- attendance
+- behaviour
+- subjects: [{ name, marks, maxMarks, remarks }]
+- overallPercentage`;
 
   const result = await generateText({
-    model: perplexity("sonar-small-online"), // You can use other models like "sonar-medium-online"
+    model: perplexity("sonar-pro"),
     prompt,
+    maxTokens: 1000,
+    temperature: 0.1,
   });
 
-  const output = result.text;
+  const output = result.text.trim();
 
-  try {
-    const parsed = JSON.parse(output);
-    return parsed;
-  } catch (error) {
-    console.error("Perplexity returned invalid JSON:", output);
-    throw new Error("Failed to parse data from Perplexity.");
+  const start = output.indexOf("{");
+  const end = output.lastIndexOf("}");
+
+  const json = output.substring(start, end + 1);
+  const parsed = JSON.parse(json);
+
+  if (!parsed.name || !Array.isArray(parsed.subjects)) {
+    throw new Error("Invalid data extracted from report");
   }
+
+  if (!parsed.overallPercentage) {
+    parsed.overallPercentage = Math.round(
+      parsed.subjects.reduce(
+        (sum: number, s: any) => sum + (s.marks / s.maxMarks) * 100,
+        0
+      ) / parsed.subjects.length
+    );
+  }
+
+  return parsed;
 }
